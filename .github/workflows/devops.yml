@@ -1,0 +1,173 @@
+name: Terraform CI/CD
+
+on:
+
+  # Run pipeline whenever code is pushed
+  push:
+    branches:
+      - "**"
+
+  # Run pipeline when Pull Request is created/updated for main
+  pull_request:
+    branches:
+      - main
+
+
+# Permissions required for GitHub OIDC authentication with Azure
+permissions:
+  contents: read
+  id-token: write
+
+
+jobs:
+
+  # =========================================================
+  # TERRAFORM PLAN
+  # =========================================================
+
+  terraform-plan:
+
+    name: Terraform Plan
+
+    runs-on: ubuntu-latest
+    environment:
+      name: dev
+    steps:
+
+      # -----------------------------------------------------
+      # Checkout Repository
+      # -----------------------------------------------------
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # -----------------------------------------------------
+      # Setup Terraform
+      # -----------------------------------------------------
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+
+      # -----------------------------------------------------
+      # Azure Login
+      # -----------------------------------------------------
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+
+      # -----------------------------------------------------
+      # Terraform Format Check
+      # -----------------------------------------------------
+
+      - name: Terraform Format Check
+        working-directory: ./environments/dev
+        run: terraform fmt -check -recursive
+
+
+      # -----------------------------------------------------
+      # Terraform Init
+      # -----------------------------------------------------
+
+      - name: Terraform Init
+        working-directory: ./environments/dev
+        run: terraform init
+
+
+      # -----------------------------------------------------
+      # Terraform Validate
+      # -----------------------------------------------------
+
+      - name: Terraform Validate
+        working-directory: ./environments/dev
+        run: terraform validate
+
+
+      # -----------------------------------------------------
+      # Terraform Plan
+      # -----------------------------------------------------
+
+      - name: Terraform Plan
+        working-directory: ./environments/dev
+        run: terraform plan
+
+
+  # =========================================================
+  # TERRAFORM APPLY
+  # =========================================================
+
+  terraform-apply:
+
+    name: Terraform Apply
+
+    # Apply will run only after Plan succeeds
+    needs: terraform-plan
+
+    # Apply ONLY when code is pushed to main branch
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    runs-on: ubuntu-latest
+
+    # GitHub Environment
+    # Configure approval rules in:
+    # Repository → Settings → Environments → production
+
+    environment:
+      name: production
+
+    steps:
+
+      # -----------------------------------------------------
+      # Checkout Repository
+      # -----------------------------------------------------
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # -----------------------------------------------------
+      # Setup Terraform
+      # -----------------------------------------------------
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+
+      # -----------------------------------------------------
+      # Azure Login
+      # -----------------------------------------------------
+
+      - name: Azure Login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+
+      # -----------------------------------------------------
+      # Terraform Init
+      # -----------------------------------------------------
+
+      - name: Terraform Init
+        working-directory: ./environments/dev
+        run: terraform init
+
+
+      # -----------------------------------------------------
+      # Terraform Apply
+      # -----------------------------------------------------
+
+      - name: Terraform Apply
+        working-directory: ./environments/dev
+        run: terraform apply -auto-approve
