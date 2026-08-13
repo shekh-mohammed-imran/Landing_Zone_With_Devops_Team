@@ -2,36 +2,42 @@ name: Terraform CI/CD
 
 on:
 
-  # Run pipeline whenever code is pushed
+  # Run on every branch push
   push:
     branches:
       - "**"
 
-  # Run pipeline when Pull Request is created/updated for main
+  # Run on Pull Request targeting main
   pull_request:
     branches:
       - main
 
 
-# Permissions required for GitHub OIDC authentication with Azure
+# =========================================================
+# PERMISSIONS
+# =========================================================
+
 permissions:
   contents: read
   id-token: write
+  security-events: write
 
 
 jobs:
 
   # =========================================================
-  # TERRAFORM PLAN
+  # TERRAFORM PLAN + SECURITY + COST
   # =========================================================
 
   terraform-plan:
 
-    name: Terraform Plan
+    name: Terraform Plan + Security Scan
 
     runs-on: ubuntu-latest
+
     environment:
       name: dev
+
     steps:
 
       # -----------------------------------------------------
@@ -64,40 +70,146 @@ jobs:
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
 
-      # -----------------------------------------------------
-      # Terraform Format Check
-      # -----------------------------------------------------
+      # =====================================================
+      # TERRAFORM FORMAT
+      # =====================================================
 
       - name: Terraform Format Check
         working-directory: ./environments/dev
         run: terraform fmt -check -recursive
 
 
-      # -----------------------------------------------------
-      # Terraform Init
-      # -----------------------------------------------------
+      # =====================================================
+      # TFLINT
+      # =====================================================
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: latest
+          cache: true
+
+
+      - name: Initialize TFLint
+        working-directory: ./environments/dev
+        run: tflint --init
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+
+      - name: Run TFLint
+        working-directory: ./environments/dev
+        run: |
+          mkdir -p ../../reports
+
+          tflint \
+            --format compact \
+            > ../../reports/tflint-report.txt
+
+
+      # =====================================================
+      # TFSEC
+      # =====================================================
+
+      - name: Install tfsec
+        run: |
+          curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+
+      - name: Run tfsec
+        working-directory: ./environments/dev
+        continue-on-error: true
+        run: |
+          mkdir -p ../../reports
+
+          tfsec . \
+            --format json \
+            --out ../../reports/tfsec-report.json
+
+          tfsec . \
+            --format lovely \
+            > ../../reports/tfsec-report.txt
+
+
+      # =====================================================
+      # TERRAFORM INIT
+      # =====================================================
 
       - name: Terraform Init
         working-directory: ./environments/dev
         run: terraform init
 
 
-      # -----------------------------------------------------
-      # Terraform Validate
-      # -----------------------------------------------------
+      # =====================================================
+      # TERRAFORM VALIDATE
+      # =====================================================
 
       - name: Terraform Validate
         working-directory: ./environments/dev
         run: terraform validate
 
 
-      # -----------------------------------------------------
-      # Terraform Plan
-      # -----------------------------------------------------
+      # =====================================================
+      # TERRAFORM PLAN
+      # =====================================================
 
       - name: Terraform Plan
         working-directory: ./environments/dev
-        run: terraform plan
+        run: terraform plan -out=tfplan
+
+
+      # =====================================================
+      # CREATE JSON PLAN
+      # =====================================================
+
+      - name: Terraform Plan JSON
+        working-directory: ./environments/dev
+        run: |
+          terraform show \
+            -json tfplan \
+            > ../../reports/terraform-plan.json
+
+
+      # =====================================================
+      # INFRACOST
+      # =====================================================
+
+      - name: Install Infracost
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
+
+
+      - name: Run Infracost
+        working-directory: ./environments/dev
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          infracost breakdown \
+            --path . \
+            --format json \
+            --out-file ../../reports/infracost-report.json
+
+
+      - name: Infracost Table
+        working-directory: ./environments/dev
+        env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
+        run: |
+          infracost breakdown \
+            --path . \
+            --format table
+
+
+      # =====================================================
+      # UPLOAD REPORTS
+      # =====================================================
+
+      - name: Upload Security and Terraform Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: terraform-security-cost-reports
+          path: reports/
 
 
   # =========================================================
@@ -108,17 +220,12 @@ jobs:
 
     name: Terraform Apply
 
-    # Apply will run only after Plan succeeds
     needs: terraform-plan
 
-    # Apply ONLY when code is pushed to main branch
+    # Apply ONLY on push to main
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     runs-on: ubuntu-latest
-
-    # GitHub Environment
-    # Configure approval rules in:
-    # Repository → Settings → Environments → production
 
     environment:
       name: production
