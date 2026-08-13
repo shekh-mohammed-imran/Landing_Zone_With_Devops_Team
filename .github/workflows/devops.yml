@@ -168,6 +168,7 @@ jobs:
       - name: Run Infracost JSON
         working-directory: ./environments/dev
         env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
           INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
         run: |
           infracost breakdown \
@@ -179,6 +180,7 @@ jobs:
       - name: Infracost Table
         working-directory: ./environments/dev
         env:
+          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
           INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
         run: |
           infracost breakdown \
