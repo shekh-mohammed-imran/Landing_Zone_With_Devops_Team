@@ -185,7 +185,7 @@ jobs:
           INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
         run: |
           infracost scan \
-            --path . \
+            
             --format json \
             --out-file ../../reports/infracost-report.json
 
@@ -196,7 +196,7 @@ jobs:
           INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
         run: |
           infracost scan \
-            --path . \
+            
             --format table
 
 
