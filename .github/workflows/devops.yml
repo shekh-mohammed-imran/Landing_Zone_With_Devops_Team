@@ -156,36 +156,7 @@ jobs:
             > ../../reports/terraform-plan.json
 
 
-      # =====================================================
-      # INFRACOST
-      # =====================================================
-
-      - name: Install Infracost
-        run: |
-          curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
-
-
-      - name: Run Infracost JSON
-        working-directory: ./environments/dev
-        env:
-          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
-          INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
-        run: |
-          infracost breakdown \
-            --path . \
-            --format json \
-            --out-file ../../reports/infracost-report.json
-
-
-      - name: Infracost Table
-        working-directory: ./environments/dev
-        env:
-          INFRACOST_API_KEY: ${{ secrets.INFRACOST_API_KEY }}
-          INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
-        run: |
-          infracost breakdown \
-            --path . \
-            --format table
+  
 
 
       # =====================================================
