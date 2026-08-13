@@ -1,7 +1,6 @@
 name: Terraform CI/CD
 
 on:
-
   # Run on every branch push
   push:
     branches:
@@ -111,24 +110,11 @@ jobs:
       # TFSEC
       # =====================================================
 
-      - name: Install tfsec
-        run: |
-          curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
-
-
-      - name: Run tfsec
-        working-directory: ./environments/dev
-        continue-on-error: true
-        run: |
-          mkdir -p ../../reports
-
-          tfsec . \
-            --format json \
-            --out ../../reports/tfsec-report.json
-
-          tfsec . \
-            --format lovely \
-            > ../../reports/tfsec-report.txt
+      - name: tfsec security scanner
+        uses: aquasecurity/tfsec-action@v1.0.0
+        with:
+          working_directory: ./environments/dev
+          soft_fail: true
 
 
       # =====================================================
@@ -179,13 +165,13 @@ jobs:
           curl -fsSL https://raw.githubusercontent.com/infracost/cli/master/scripts/install.sh | sh
 
 
-      - name: Run Infracost
+      - name: Run Infracost JSON
         working-directory: ./environments/dev
         env:
           INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
         run: |
-          infracost scan \
-            
+          infracost breakdown \
+            --path . \
             --format json \
             --out-file ../../reports/infracost-report.json
 
@@ -195,8 +181,8 @@ jobs:
         env:
           INFRACOST_CLI_AUTHENTICATION_TOKEN: ${{ secrets.INFRACOST_API_KEY }}
         run: |
-          infracost scan \
-            
+          infracost breakdown \
+            --path . \
             --format table
 
 
